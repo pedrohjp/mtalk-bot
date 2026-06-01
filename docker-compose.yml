@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: mtalk-bot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ./app
+    container_name: mtalk-bot-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      HOST: 0.0.0.0
+
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
+      MTALK_WEBHOOK_TOKEN: ${MTALK_WEBHOOK_TOKEN}
+      MTALK_API_SEND_MESSAGE_URL: ${MTALK_API_SEND_MESSAGE_URL}
+      MTALK_API_TOKEN: ${MTALK_API_TOKEN}
+      GLPI_BASE_URL: ${GLPI_BASE_URL}
+      GLPI_APP_TOKEN: ${GLPI_APP_TOKEN}
+      GLPI_AUTHORIZATION_TOKEN: ${GLPI_AUTHORIZATION_TOKEN}
+      GLPI_ENTITY_CACHE_TTL_MINUTES: ${GLPI_ENTITY_CACHE_TTL_MINUTES}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./app:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev"
+
+volumes:
+  postgres_data:
