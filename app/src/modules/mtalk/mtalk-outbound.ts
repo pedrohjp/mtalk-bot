@@ -3,6 +3,7 @@ import { env } from '../../config/env'
 type SendMtalkTextMessageInput = {
   number: string
   body: string
+  saveOnTicket?: boolean
 }
 
 type MtalkSendMessageResponse = {
@@ -46,7 +47,8 @@ export async function sendMtalkTextMessage(
     body: JSON.stringify({
       number: input.number,
       body: input.body,
-      saveOnTicket: env.mtalkOutboundSaveOnTicket,
+      saveOnTicket:
+        input.saveOnTicket ?? env.mtalkOutboundSaveOnTicket,
       linkPreview: false,
       startChatbot: false
     })

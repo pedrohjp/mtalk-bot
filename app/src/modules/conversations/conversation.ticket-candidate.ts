@@ -51,12 +51,15 @@ function normalizeForClassification(value: string | null) {
   return removeDiacritics(compactWhitespace(value ?? '').toLowerCase())
 }
 
-function buildTicketTitle(companyName: string, problemSummary: string | null) {
+function buildTicketTitle(companyName: string | null, problemSummary: string | null) {
   const normalizedSummary = problemSummary
     ? compactWhitespace(problemSummary)
     : 'Solicitacao de suporte'
 
-  return `${companyName} - ${normalizedSummary}`.slice(0, 120)
+  return (companyName
+    ? `${companyName} - ${normalizedSummary}`
+    : normalizedSummary
+  ).slice(0, 120)
 }
 
 function inferTicketType(problemDetails: string | null): TicketType {
@@ -114,10 +117,10 @@ function inferTicketPriority(problemDetails: string | null): TicketPriority {
 export function buildGlpiTicketCandidate(
   input: BuildTicketCandidateInput
 ): GlpiTicketCandidate {
-  const companyName =
+  const informedCompanyName =
     input.session.glpiEntityName ??
-    input.extractedData.companyName ??
-    'Empresa nao informada'
+    input.extractedData.companyName
+  const companyName = informedCompanyName ?? 'Empresa nao informada'
   const requesterName = input.extractedData.contactName ?? 'Nao informado'
   const contactNumber = input.session.contactNumber ?? 'Nao informado'
   const problemSummary =
@@ -131,7 +134,7 @@ export function buildGlpiTicketCandidate(
     inferTicketPriority(input.extractedData.problemDetails)
   const title =
     input.ticketDraft.title ??
-    buildTicketTitle(companyName, input.extractedData.problemSummary)
+    buildTicketTitle(informedCompanyName, input.extractedData.problemSummary)
   const description =
     input.ticketDraft.description ??
     [

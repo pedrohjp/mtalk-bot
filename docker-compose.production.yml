@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: mtalk-bot-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - mtalk_bot_prod_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.production
+    container_name: mtalk-bot-prod-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
+      MTALK_WEBHOOK_TOKEN: ${MTALK_WEBHOOK_TOKEN}
+      MTALK_API_SEND_MESSAGE_URL: ${MTALK_API_SEND_MESSAGE_URL}
+      MTALK_API_TOKEN: ${MTALK_API_TOKEN}
+      TICKETZ_BASE_URL: ${TICKETZ_BASE_URL}
+      TICKETZ_PANEL_EMAIL: ${TICKETZ_PANEL_EMAIL}
+      TICKETZ_PANEL_PASSWORD: ${TICKETZ_PANEL_PASSWORD}
+      GLPI_BASE_URL: ${GLPI_BASE_URL}
+      GLPI_APP_TOKEN: ${GLPI_APP_TOKEN}
+      GLPI_AUTHORIZATION_TOKEN: ${GLPI_AUTHORIZATION_TOKEN}
+      GLPI_ENTITY_CACHE_TTL_MINUTES: ${GLPI_ENTITY_CACHE_TTL_MINUTES:-360}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      MESSAGE_DEBOUNCE_SECONDS: ${MESSAGE_DEBOUNCE_SECONDS:-5}
+      WORKER_ENABLED: ${WORKER_ENABLED:-true}
+      WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-1000}
+      WORKER_RETRY_SECONDS: ${WORKER_RETRY_SECONDS:-10}
+      WORKER_STALE_PROCESSING_SECONDS: ${WORKER_STALE_PROCESSING_SECONDS:-300}
+      SOLUTION_NOTIFIER_ENABLED: ${SOLUTION_NOTIFIER_ENABLED:-true}
+      SOLUTION_POLL_INTERVAL_MS: ${SOLUTION_POLL_INTERVAL_MS:-20000}
+      SOLUTION_WORKER_STALE_PROCESSING_SECONDS: ${SOLUTION_WORKER_STALE_PROCESSING_SECONDS:-300}
+      AUTOMATION_EXPIRATION_ENABLED: ${AUTOMATION_EXPIRATION_ENABLED:-true}
+      AUTOMATION_EXPIRATION_INACTIVITY_MINUTES: ${AUTOMATION_EXPIRATION_INACTIVITY_MINUTES:-60}
+      AUTOMATION_EXPIRATION_POLL_INTERVAL_MS: ${AUTOMATION_EXPIRATION_POLL_INTERVAL_MS:-20000}
+      AUTOMATION_EXPIRATION_WORKER_STALE_PROCESSING_SECONDS: ${AUTOMATION_EXPIRATION_WORKER_STALE_PROCESSING_SECONDS:-300}
+      MTALK_OUTBOUND_SAVE_ON_TICKET: ${MTALK_OUTBOUND_SAVE_ON_TICKET:-true}
+    ports:
+      - "127.0.0.1:${MTALK_BOT_HOST_PORT:-3001}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  mtalk_bot_prod_postgres_data:

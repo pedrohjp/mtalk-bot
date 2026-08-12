@@ -64,7 +64,6 @@ function deriveStatusFromConversationData(
   input: ConversationStateMachineInput
 ): ConversationStatus {
   const { session, aiAnalysis, extractedData } = input
-  const hasCompanyName = hasValue(extractedData.companyName)
   const hasProblemDetails = hasValue(extractedData.problemDetails)
   const hasProblemSummary = hasValue(extractedData.problemSummary)
 
@@ -76,14 +75,16 @@ function deriveStatusFromConversationData(
     return 'DONE'
   }
 
-  if (aiAnalysis.intent === 'handoff_to_human') {
+  if (
+    aiAnalysis.intent === 'handoff_to_human' ||
+    aiAnalysis.intent === 'service_inquiry'
+  ) {
     return 'HANDOFF_TO_HUMAN'
   }
 
   if (
     aiAnalysis.userConfirmed &&
     aiAnalysis.shouldCreateTicket &&
-    hasCompanyName &&
     hasProblemDetails &&
     hasProblemSummary
   ) {
@@ -92,15 +93,10 @@ function deriveStatusFromConversationData(
 
   if (
     aiAnalysis.readyForConfirmation &&
-    hasCompanyName &&
     hasProblemDetails &&
     hasProblemSummary
   ) {
     return 'AWAITING_CONFIRMATION'
-  }
-
-  if (!hasCompanyName || aiAnalysis.intent === 'collect_company') {
-    return 'COLLECTING_COMPANY'
   }
 
   if (!hasProblemDetails || aiAnalysis.intent === 'collect_problem') {

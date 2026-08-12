@@ -38,6 +38,9 @@ export const env = {
   mtalkWebhookToken: readOptionalEnv('MTALK_WEBHOOK_TOKEN'),
   mtalkApiSendMessageUrl: readOptionalEnv('MTALK_API_SEND_MESSAGE_URL'),
   mtalkApiToken: readOptionalEnv('MTALK_API_TOKEN'),
+  ticketzBaseUrl: readOptionalEnv('TICKETZ_BASE_URL'),
+  ticketzPanelEmail: readOptionalEnv('TICKETZ_PANEL_EMAIL'),
+  ticketzPanelPassword: readOptionalEnv('TICKETZ_PANEL_PASSWORD'),
   glpiBaseUrl:
     readOptionalEnv('GLPI_BASE_URL') ??
     'https://ontech.verdanadesk.com/apirest.php',
@@ -45,8 +48,7 @@ export const env = {
   glpiAuthorizationToken: readOptionalEnv('GLPI_AUTHORIZATION_TOKEN'),
   glpiEntityCacheTtlMinutes: readNumberEnv('GLPI_ENTITY_CACHE_TTL_MINUTES', 360),
   geminiApiKey: readOptionalEnv('GEMINI_API_KEY'),
-  geminiModel: readOptionalEnv('GEMINI_MODEL') ?? 'gemini-2.5-flash',
-  geminiTemperature: readNumberEnv('GEMINI_TEMPERATURE', 0.2),
+  geminiModel: readOptionalEnv('GEMINI_MODEL') ?? 'gemini-3.5-flash-lite',
   messageDebounceSeconds: readNumberEnv('MESSAGE_DEBOUNCE_SECONDS', 5),
   workerEnabled: readOptionalEnv('WORKER_ENABLED') !== 'false',
   workerPollIntervalMs: readNumberEnv('WORKER_POLL_INTERVAL_MS', 1000),
@@ -55,18 +57,28 @@ export const env = {
     'WORKER_STALE_PROCESSING_SECONDS',
     300
   ),
-  assignmentNotifierEnabled:
-    readOptionalEnv('ASSIGNMENT_NOTIFIER_ENABLED') !== 'false',
-  assignmentPollIntervalMs: readNumberEnv(
-    'ASSIGNMENT_POLL_INTERVAL_MS',
+  solutionNotifierEnabled:
+    readOptionalEnv('SOLUTION_NOTIFIER_ENABLED') !== 'false',
+  solutionPollIntervalMs: readNumberEnv(
+    'SOLUTION_POLL_INTERVAL_MS',
     20000
   ),
-  assignmentWorkerRetrySeconds: readNumberEnv(
-    'ASSIGNMENT_WORKER_RETRY_SECONDS',
-    20
+  solutionWorkerStaleProcessingSeconds: readNumberEnv(
+    'SOLUTION_WORKER_STALE_PROCESSING_SECONDS',
+    300
   ),
-  assignmentWorkerStaleProcessingSeconds: readNumberEnv(
-    'ASSIGNMENT_WORKER_STALE_PROCESSING_SECONDS',
+  automationExpirationEnabled:
+    readOptionalEnv('AUTOMATION_EXPIRATION_ENABLED') !== 'false',
+  automationExpirationInactivityMinutes: readNumberEnv(
+    'AUTOMATION_EXPIRATION_INACTIVITY_MINUTES',
+    60
+  ),
+  automationExpirationPollIntervalMs: readNumberEnv(
+    'AUTOMATION_EXPIRATION_POLL_INTERVAL_MS',
+    20000
+  ),
+  automationExpirationWorkerStaleProcessingSeconds: readNumberEnv(
+    'AUTOMATION_EXPIRATION_WORKER_STALE_PROCESSING_SECONDS',
     300
   ),
   mtalkOutboundSaveOnTicket:

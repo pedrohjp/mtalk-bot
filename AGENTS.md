@@ -205,3 +205,165 @@ Servico backend para integrar o MTALK (entrada via webhook de atendimentos Whats
 - A cada rodada, o worker consulta `GET /Ticket/{id}/Ticket_User` no GLPI e tenta identificar tecnico atribuido por `type = 2` com `users_id` valido.
 - Quando encontra tecnico atribuido, o sistema envia uma mensagem fixa pelo MTALK informando que o chamado ja foi assumido por um tecnico.
 - A notificacao e idempotente: apos envio bem sucedido, grava `assignment_notified_at` e nao reenvia novamente.
+
+## Implementado na etapa 13
+- Frontend admin minimo servido pelo proprio backend em `/admin-ui`.
+- Login simples hardcoded para uso interno inicial:
+  - usuario: `admin`
+  - senha: `123456`
+- Sessao do admin web protegida por cookie HttpOnly com assinatura simples.
+- O frontend admin usa endpoints proprios em `/admin-ui/api/*`, sem expor `ADMIN_API_TOKEN` ao navegador.
+- Funcionalidades iniciais do painel:
+  - visualizar e editar o prompt ativo da IA;
+  - visualizar, adicionar e remover numeros da whitelist interna (`staff_contacts`).
+- Estrutura propositalmente simples:
+  - um `index.html`
+  - um `styles.css`
+  - um `app.js`
+  - tudo servido pelo Fastify, sem bundler e sem framework frontend dedicado.
+
+## Implementado na etapa 15
+- Worker separado para expiracao da automacao por inatividade.
+- Nova migration adiciona campos de expiracao em `conversation_sessions`:
+  - `automation_expired_at`
+  - `automation_expiration_reason`
+  - `last_expiration_check_at`
+  - `expiration_started_at`
+- A expiracao olha apenas sessoes que:
+  - ainda nao estao em `DONE`, `HANDOFF_TO_HUMAN` ou `ERROR`;
+  - nao foram expiradas anteriormente;
+  - estao sem interacao ha mais de `AUTOMATION_EXPIRATION_INACTIVITY_MINUTES` (padrao 60 minutos).
+- Quando expira, o sistema tenta transferir o atendimento para a fila humana configurada.
+- Se a transferencia for bem sucedida, a sessao e marcada como expirada por inatividade e fica com status `HANDOFF_TO_HUMAN`.
+- Se houver erro terminal de permissao ou ausencia de fila humana configurada, a automacao tambem e encerrada sem entrar em loop infinito de retry.
+- A exclusao fisica do historico nao acontece nesta etapa; a expiracao apenas encerra a automacao e preserva auditoria.
+
+## Implementado na etapa 14
+- Nova configuracao persistida de roteamento do MTALK em `app_settings`, com tres filas:
+  - `initialQueueId`
+  - `aiQueueId`
+  - `humanQueueId`
+- Painel admin agora consegue:
+  - listar as filas reais do Ticketz/MTALK via login autenticado no painel;
+  - salvar a configuracao das filas inicial, IA e humana.
+- Novo client autenticado do Ticketz/MTALK usando `POST /auth/login` e JWT Bearer para:
+  - listar filas (`GET /queue`);
+  - transferir atendimento de fila (`PUT /tickets/:ticketId`);
+  - encerrar atendimento (`PUT /tickets/:ticketId` com `status=closed`).
+- Novas credenciais do painel Ticketz/MTALK via ambiente:
+  - `TICKETZ_PANEL_EMAIL`
+  - `TICKETZ_PANEL_PASSWORD`
+  - `TICKETZ_BASE_URL` opcional; se ausente, e derivado de `MTALK_API_SEND_MESSAGE_URL`.
+- O prompt enviado ao Gemini ganhou uma regra fixa adicional fora do prompt editavel:
+  - se o usuario pedir explicitamente humano/atendente/pessoa, a IA deve sinalizar `handoff_to_human`.
+- Quando a IA sinaliza handoff humano:
+  - o backend responde com mensagem fixa de encaminhamento;
+  - transfere o atendimento para a fila humana configurada;
+  - marca `human_handoff_transferred_at` na sessao.
+- Quando o ticket e criado com sucesso no GLPI:
+  - o backend envia a resposta final ao usuario;
+  - mantem o atendimento aberto e o transfere para a fila humana configurada;
+  - marca `human_handoff_transferred_at` na sessao.
+- Foram adicionadas protecoes de retry para estados terminais:
+  - sessoes `DONE` nao voltam a chamar a IA em retry;
+  - sessoes `HANDOFF_TO_HUMAN` nao dependem de nova analise da IA para concluir a transferencia pendente.
+
+## Implementado na etapa 16
+- Mensagem deterministica de apresentacao da OMNI no inicio de novos atendimentos processados pela fila da IA.
+- O texto da apresentacao fica persistido em `app_settings` com uma versao padrao e pode ser alterado pelo painel administrativo.
+- Novos endpoints autenticados do painel:
+  - `GET /admin-ui/api/welcome-message`
+  - `PUT /admin-ui/api/welcome-message`
+- Nova migration adiciona `welcome_sent_at` em `conversation_sessions`, impedindo o envio normal da apresentacao mais de uma vez por `mtalk_ticket_id`.
+- Se a primeira rodada contiver apenas saudacao ou escolha numerica do menu do MTALK, o backend envia a apresentacao e aguarda a proxima mensagem sem chamar o Gemini.
+- Se a primeira rodada ja contiver uma solicitacao util ou anexo, o conteudo e preservado e processado pelo Gemini depois da apresentacao.
+- O contexto fixo do Gemini informa que a OMNI ja foi apresentada, evitando que a IA repita a apresentacao.
+
+## Implementado na etapa 17
+- A mensagem final de criacao do chamado agora informa que o atendimento sera encaminhado para a equipe humana.
+- O atendimento continua aberto no MTALK e e transferido para a fila humana depois da criacao do ticket no GLPI.
+- Nova intencao estruturada `service_inquiry` para perguntas sobre servicos oferecidos pela ONTECH.
+- Perguntas sobre disponibilidade, venda ou realizacao de servicos sao encaminhadas para o fluxo existente de `HANDOFF_TO_HUMAN`.
+- Solicitacoes operacionais concretas continuam elegiveis para abertura de chamado e nao devem ser confundidas com perguntas comerciais sobre servicos.
+- Nova migration adiciona `clarification_attempts` em `conversation_sessions`.
+- Em conversas `USER`, a IA pode fazer uma unica pergunta complementar quando ja compreendeu a solicitacao, mas falta um detalhe pratico relevante para o tecnico.
+- O limite de uma complementacao e aplicado pelo backend e o contador so e incrementado depois do envio bem-sucedido da pergunta.
+- O modo `STAFF_FAST_TICKET` nao utiliza a complementacao opcional e preserva o fluxo rapido.
+
+## Implementado na etapa 18
+- O prazo padrao de expiracao da automacao por inatividade passou de 15 para 60 minutos.
+- `AUTOMATION_EXPIRATION_INACTIVITY_MINUTES` agora e repassada explicitamente pelo Docker Compose, com fallback 60.
+- Antes de transferir uma conversa expirada para a fila humana, o backend envia uma mensagem fixa explicando que o redirecionamento ocorre por inatividade.
+- Nova migration adiciona `expiration_notice_sent_at` em `conversation_sessions`.
+- O aviso de expiracao e persistido como mensagem outbound e nao e reenviado em retries normais da transferencia.
+- Se a fila humana nao estiver configurada, o aviso de redirecionamento nao e enviado para evitar uma informacao incorreta ao usuario.
+
+## Implementado na etapa 19
+- Empresa/unidade deixou de ser requisito obrigatorio para confirmar e criar chamados.
+- A state machine agora exige apenas detalhes e resumo consistentes da solicitacao antes da confirmacao.
+- `company_name` foi removido de `missingFields` no contrato estruturado do Gemini.
+- Se o Gemini tentar usar `collect_company` sem necessidade, o backend redireciona o fluxo para coleta do problema ou confirmacao, sem insistir na empresa.
+- Quando houver empresa, a mensagem de confirmacao exibe explicitamente `Empresa/unidade: {nome}`; sem empresa, essa parte e omitida.
+- Titulos de tickets sem empresa nao recebem mais o prefixo artificial `Empresa nao informada`.
+- Problemas envolvendo equipamentos sem identificacao pratica usam a unica pergunta complementar disponivel para solicitar nome, numero, patrimonio ou localizacao.
+- O caso `meu computador nao liga` gera uma pergunta de identificacao; descricoes como `Desktop 01 nao liga` podem seguir diretamente para confirmacao.
+
+## Implementado na etapa 20
+- Todas as mensagens automaticas enviadas pelo backend ao usuario recebem o prefixo idempotente `*OMNI*:`.
+- O prefixo e aplicado a apresentacao inicial, respostas conversacionais, confirmacoes, handoff, expiracao e notificacoes automaticas existentes.
+- Depois da criacao confirmada do ticket no GLPI:
+  1. o backend envia a mensagem com o numero do chamado;
+  2. encerra o atendimento correspondente no MTALK;
+  3. persiste `mtalk_closed_at` para impedir novos encerramentos em retries.
+- O pedido explicito por atendimento humano continua transferindo a conversa para a fila humana configurada.
+- Depois de 60 minutos de inatividade:
+  1. o backend envia um aviso informando que o atendimento sera encerrado;
+  2. encerra o atendimento no MTALK;
+  3. marca a sessao como expirada e `DONE`, preservando o historico para auditoria.
+- A expiracao por inatividade deixou de depender da configuracao de fila humana.
+
+## Implementado na etapa 21
+- O polling de atribuicao de tecnico foi removido; atribuir um tecnico no GLPI nao envia mais mensagem ao usuario.
+- Novo worker de solucao consulta `GET /Ticket/{id}` para tickets criados pelo bot.
+- O polling considera o ticket concluido quando o GLPI retorna:
+  - `status = 5` (`SOLVED`);
+  - `status = 6` (`CLOSED`), como fallback para fechamento direto.
+- A verificacao acontece a cada `SOLUTION_POLL_INTERVAL_MS` (padrao 20 segundos).
+- A notificacao de conclusao usa a mensagem:
+  - `*OMNI*: Seu chamado nº {id} foi concluido com sucesso. Agradecemos o contato.`
+- O envio de conclusao usa explicitamente `saveOnTicket: false`, evitando salvar a mensagem ou abrir novo atendimento no MTALK.
+- A migration `011_solution_notifications.sql` adiciona:
+  - `solution_tracking_started_at`
+  - `last_solution_check_at`
+  - `solution_check_started_at`
+  - `solution_notified_at`
+  - `glpi_last_status`
+- Somente tickets criados depois da migration recebem `solution_tracking_started_at`; tickets historicos nao sao notificados retroativamente.
+- Depois do envio bem-sucedido, `solution_notified_at` garante idempotencia e remove o ticket das proximas verificacoes.
+- As colunas antigas de atribuicao permanecem no banco apenas como legado historico, sem worker ou comportamento ativo.
+
+## Implementado na etapa 22
+- O encerramento no Ticketz/MTALK agora envia `status=closed`, `justClose=true`, `userId=null` e `queueId=null`.
+- Limpar `userId` e `queueId` evita que um atendimento encerrado continue visualmente associado a fila do chatbot.
+- A resposta da API de encerramento e validada; `mtalk_closed_at` so e persistido quando o Ticketz retorna efetivamente `status=closed`.
+- Nova migration `012_optional_company_prompt.sql` adiciona `company_prompt_attempts` em `conversation_sessions`.
+- Em conversas `USER`, depois de coletar detalhes suficientes, o backend pode fazer uma unica pergunta opcional adicional sobre empresa/unidade.
+- A coleta opcional de empresa:
+  - nao bloqueia a criacao do chamado;
+  - nao ocorre em `STAFF_FAST_TICKET`;
+  - nao atrasa solicitacoes urgentes;
+  - nao se repete depois de uma resposta como `nao se aplica`;
+  - possui contador separado da pergunta complementar tecnica.
+- Quando a empresa continuar ausente depois dessa tentativa, o fluxo segue normalmente para confirmacao e criacao sem `entities_id`.
+
+## Implementado na etapa 23
+- O modelo padrao do Gemini passou de `gemini-2.5-flash` para `gemini-3.5-flash-lite`, devido a indisponibilidade do modelo anterior para novos usuarios/projetos.
+- `GEMINI_MODEL` agora e repassada pelo Docker Compose e pode sobrescrever o modelo padrao sem alteracao de codigo.
+- O parametro de geracao `temperature` deixou de ser enviado, mantendo compatibilidade com a API dos modelos Gemini mais novos.
+
+## Implementado na etapa 24
+- Foi criada uma configuracao de producao separada em `docker-compose.production.yml`, preservando o Compose de desenvolvimento local.
+- O `app/Dockerfile.production` compila o TypeScript em uma etapa de build e executa somente o JavaScript compilado com `node dist/server.js`.
+- Em producao, o PostgreSQL nao publica a porta `5432` e o app publica somente `127.0.0.1:3001` por padrao, evitando conflito com o Grafana na porta `3000` e permitindo proxy pelo Apache.
+- O volume de producao possui nome proprio (`mtalk_bot_prod_postgres_data`) para nao compartilhar dados com outros projetos.
+- O guia `DEPLOY.md` documenta a subida, validacao, atualizacao e o cuidado de nunca usar `docker compose down -v` no banco de producao.

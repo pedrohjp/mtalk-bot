@@ -28,10 +28,18 @@ type ClaimedConversationSessionRow = {
   contact_name: string | null
   contact_number: string | null
   company_name: string | null
+  welcome_sent_at: Date | null
+  mtalk_closed_at: Date | null
+  human_handoff_transferred_at: Date | null
+  automation_expired_at: Date | null
+  automation_expiration_reason: string | null
   glpi_ticket_id: string | null
   glpi_created_at: Date | null
   assigned_glpi_user_id: string | null
   assigned_glpi_user_name: string | null
+  last_expiration_check_at: Date | null
+  expiration_started_at: Date | null
+  expiration_notice_sent_at: Date | null
   last_assignment_check_at: Date | null
   assignment_check_started_at: Date | null
   assignment_notified_at: Date | null
@@ -41,6 +49,8 @@ type ClaimedConversationSessionRow = {
   company_lookup_attempted_at: Date | null
   problem_details: string | null
   problem_summary: string | null
+  clarification_attempts: number
+  company_prompt_attempts: number
   awaiting_confirmation: boolean
   last_message_at: Date
   next_processing_at: Date | null
@@ -79,10 +89,18 @@ export type ClaimedConversationSession = {
   contactName: string | null
   contactNumber: string | null
   companyName: string | null
+  welcomeSentAt: Date | null
+  mtalkClosedAt: Date | null
+  humanHandoffTransferredAt: Date | null
+  automationExpiredAt: Date | null
+  automationExpirationReason: string | null
   glpiTicketId: number | null
   glpiCreatedAt: Date | null
   assignedGlpiUserId: number | null
   assignedGlpiUserName: string | null
+  lastExpirationCheckAt: Date | null
+  expirationStartedAt: Date | null
+  expirationNoticeSentAt: Date | null
   lastAssignmentCheckAt: Date | null
   assignmentCheckStartedAt: Date | null
   assignmentNotifiedAt: Date | null
@@ -92,10 +110,19 @@ export type ClaimedConversationSession = {
   companyLookupAttemptedAt: Date | null
   problemDetails: string | null
   problemSummary: string | null
+  clarificationAttempts: number
+  companyPromptAttempts: number
   awaitingConfirmation: boolean
   lastMessageAt: Date
   nextProcessingAt: Date | null
   processingStartedAt: Date
+}
+
+export type ConversationSolutionCheckSession = {
+  mtalkTicketId: string
+  contactNumber: string | null
+  glpiTicketId: number
+  solutionCheckStartedAt: Date
 }
 
 export type PendingConversationMessage = {
@@ -322,12 +349,20 @@ function mapClaimedConversationSession(
     contactName: row.contact_name,
     contactNumber: row.contact_number,
     companyName: row.company_name,
+    welcomeSentAt: row.welcome_sent_at,
+    mtalkClosedAt: row.mtalk_closed_at,
+    humanHandoffTransferredAt: row.human_handoff_transferred_at,
+    automationExpiredAt: row.automation_expired_at,
+    automationExpirationReason: row.automation_expiration_reason,
     glpiTicketId: row.glpi_ticket_id ? Number(row.glpi_ticket_id) : null,
     glpiCreatedAt: row.glpi_created_at,
     assignedGlpiUserId: row.assigned_glpi_user_id
       ? Number(row.assigned_glpi_user_id)
       : null,
     assignedGlpiUserName: row.assigned_glpi_user_name,
+    lastExpirationCheckAt: row.last_expiration_check_at,
+    expirationStartedAt: row.expiration_started_at,
+    expirationNoticeSentAt: row.expiration_notice_sent_at,
     lastAssignmentCheckAt: row.last_assignment_check_at,
     assignmentCheckStartedAt: row.assignment_check_started_at,
     assignmentNotifiedAt: row.assignment_notified_at,
@@ -337,6 +372,8 @@ function mapClaimedConversationSession(
     companyLookupAttemptedAt: row.company_lookup_attempted_at,
     problemDetails: row.problem_details,
     problemSummary: row.problem_summary,
+    clarificationAttempts: row.clarification_attempts,
+    companyPromptAttempts: row.company_prompt_attempts,
     awaitingConfirmation: row.awaiting_confirmation,
     lastMessageAt: row.last_message_at,
     nextProcessingAt: row.next_processing_at,
@@ -354,12 +391,20 @@ function mapAssignmentCheckConversationSession(
     contactName: row.contact_name,
     contactNumber: row.contact_number,
     companyName: row.company_name,
+    welcomeSentAt: row.welcome_sent_at,
+    mtalkClosedAt: row.mtalk_closed_at,
+    humanHandoffTransferredAt: row.human_handoff_transferred_at,
+    automationExpiredAt: row.automation_expired_at,
+    automationExpirationReason: row.automation_expiration_reason,
     glpiTicketId: row.glpi_ticket_id ? Number(row.glpi_ticket_id) : null,
     glpiCreatedAt: row.glpi_created_at,
     assignedGlpiUserId: row.assigned_glpi_user_id
       ? Number(row.assigned_glpi_user_id)
       : null,
     assignedGlpiUserName: row.assigned_glpi_user_name,
+    lastExpirationCheckAt: row.last_expiration_check_at,
+    expirationStartedAt: row.expiration_started_at,
+    expirationNoticeSentAt: row.expiration_notice_sent_at,
     lastAssignmentCheckAt: row.last_assignment_check_at,
     assignmentCheckStartedAt: row.assignment_check_started_at,
     assignmentNotifiedAt: row.assignment_notified_at,
@@ -369,6 +414,8 @@ function mapAssignmentCheckConversationSession(
     companyLookupAttemptedAt: row.company_lookup_attempted_at,
     problemDetails: row.problem_details,
     problemSummary: row.problem_summary,
+    clarificationAttempts: row.clarification_attempts,
+    companyPromptAttempts: row.company_prompt_attempts,
     awaitingConfirmation: row.awaiting_confirmation,
     lastMessageAt: row.last_message_at,
     nextProcessingAt: row.next_processing_at,
@@ -437,10 +484,18 @@ export async function claimNextConversationSessionForProcessing() {
           conversation_session.contact_name,
           conversation_session.contact_number,
           conversation_session.company_name,
+          conversation_session.welcome_sent_at,
+          conversation_session.mtalk_closed_at,
+          conversation_session.human_handoff_transferred_at,
+          conversation_session.automation_expired_at,
+          conversation_session.automation_expiration_reason,
           conversation_session.glpi_ticket_id,
           conversation_session.glpi_created_at,
           conversation_session.assigned_glpi_user_id,
           conversation_session.assigned_glpi_user_name,
+          conversation_session.last_expiration_check_at,
+          conversation_session.expiration_started_at,
+          conversation_session.expiration_notice_sent_at,
           conversation_session.last_assignment_check_at,
           conversation_session.assignment_check_started_at,
           conversation_session.assignment_notified_at,
@@ -450,6 +505,8 @@ export async function claimNextConversationSessionForProcessing() {
           conversation_session.company_lookup_attempted_at,
           conversation_session.problem_details,
           conversation_session.problem_summary,
+          conversation_session.clarification_attempts,
+          conversation_session.company_prompt_attempts,
           conversation_session.awaiting_confirmation,
           conversation_session.last_message_at,
           conversation_session.next_processing_at,
@@ -477,6 +534,12 @@ export async function markConversationGlpiTicketCreated(
         SET
           glpi_ticket_id = $2,
           glpi_created_at = NOW(),
+          mtalk_closed_at = NULL,
+          solution_tracking_started_at = NOW(),
+          last_solution_check_at = NULL,
+          solution_check_started_at = NULL,
+          solution_notified_at = NULL,
+          glpi_last_status = 1,
           last_assignment_check_at = NULL,
           assignment_check_started_at = NULL,
           assignment_notified_at = NULL,
@@ -489,30 +552,58 @@ export async function markConversationGlpiTicketCreated(
   })
 }
 
-export async function claimNextConversationSessionForAssignmentCheck() {
+export async function markConversationMtalkClosed(mtalkTicketId: string) {
+  return withDbTransaction(async (client) => {
+    await client.query(
+      `
+        UPDATE conversation_sessions
+        SET mtalk_closed_at = NOW()
+        WHERE mtalk_ticket_id = $1
+      `,
+      [mtalkTicketId]
+    )
+  })
+}
+
+export async function markConversationHumanHandoffTransferred(
+  mtalkTicketId: string
+) {
+  return withDbTransaction(async (client) => {
+    await client.query(
+      `
+        UPDATE conversation_sessions
+        SET human_handoff_transferred_at = NOW()
+        WHERE mtalk_ticket_id = $1
+      `,
+      [mtalkTicketId]
+    )
+  })
+}
+
+export async function claimNextConversationSessionForExpiration() {
   return withDbTransaction(async (client) => {
     const result = await client.query<ClaimedConversationSessionRow>(
       `
         WITH candidate AS (
           SELECT mtalk_ticket_id
           FROM conversation_sessions
-          WHERE glpi_ticket_id IS NOT NULL
-            AND assignment_notified_at IS NULL
-            AND status = 'DONE'
+          WHERE automation_expired_at IS NULL
+            AND status NOT IN ('DONE', 'HANDOFF_TO_HUMAN', 'ERROR')
+            AND last_message_at <= NOW() - ($2 * INTERVAL '1 second')
             AND (
-              assignment_check_started_at IS NULL
-              OR assignment_check_started_at < NOW() - ($1 * INTERVAL '1 second')
+              expiration_started_at IS NULL
+              OR expiration_started_at < NOW() - ($1 * INTERVAL '1 second')
             )
             AND (
-              last_assignment_check_at IS NULL
-              OR last_assignment_check_at <= NOW() - ($2 * INTERVAL '1 second')
+              last_expiration_check_at IS NULL
+              OR last_expiration_check_at <= NOW() - ($3 * INTERVAL '1 second')
             )
-          ORDER BY COALESCE(last_assignment_check_at, glpi_created_at, updated_at) ASC
+          ORDER BY last_message_at ASC
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
         UPDATE conversation_sessions AS conversation_session
-        SET assignment_check_started_at = NOW()
+        SET expiration_started_at = NOW()
         FROM candidate
         WHERE conversation_session.mtalk_ticket_id = candidate.mtalk_ticket_id
         RETURNING
@@ -522,10 +613,18 @@ export async function claimNextConversationSessionForAssignmentCheck() {
           conversation_session.contact_name,
           conversation_session.contact_number,
           conversation_session.company_name,
+          conversation_session.welcome_sent_at,
+          conversation_session.mtalk_closed_at,
+          conversation_session.human_handoff_transferred_at,
+          conversation_session.automation_expired_at,
+          conversation_session.automation_expiration_reason,
           conversation_session.glpi_ticket_id,
           conversation_session.glpi_created_at,
           conversation_session.assigned_glpi_user_id,
           conversation_session.assigned_glpi_user_name,
+          conversation_session.last_expiration_check_at,
+          conversation_session.expiration_started_at,
+          conversation_session.expiration_notice_sent_at,
           conversation_session.last_assignment_check_at,
           conversation_session.assignment_check_started_at,
           conversation_session.assignment_notified_at,
@@ -535,14 +634,17 @@ export async function claimNextConversationSessionForAssignmentCheck() {
           conversation_session.company_lookup_attempted_at,
           conversation_session.problem_details,
           conversation_session.problem_summary,
+          conversation_session.clarification_attempts,
+          conversation_session.company_prompt_attempts,
           conversation_session.awaiting_confirmation,
           conversation_session.last_message_at,
           conversation_session.next_processing_at,
           conversation_session.processing_started_at
       `,
       [
-        env.assignmentWorkerStaleProcessingSeconds,
-        Math.ceil(env.assignmentPollIntervalMs / 1000)
+        env.automationExpirationWorkerStaleProcessingSeconds,
+        env.automationExpirationInactivityMinutes * 60,
+        Math.ceil(env.automationExpirationPollIntervalMs / 1000)
       ]
     )
 
@@ -554,12 +656,11 @@ export async function claimNextConversationSessionForAssignmentCheck() {
   })
 }
 
-export async function markConversationAssignmentChecked(
+export async function markConversationAutomationExpired(
   mtalkTicketId: string,
-  update?: {
-    assignedGlpiUserId?: number | null
-    assignedGlpiUserName?: string | null
-    assignmentNotifiedAt?: Date | null
+  update: {
+    reason: string
+    mtalkClosed: boolean
   }
 ) {
   return withDbTransaction(async (client) => {
@@ -567,24 +668,25 @@ export async function markConversationAssignmentChecked(
       `
         UPDATE conversation_sessions
         SET
-          assignment_check_started_at = NULL,
-          last_assignment_check_at = NOW(),
-          assigned_glpi_user_id = COALESCE($2, assigned_glpi_user_id),
-          assigned_glpi_user_name = COALESCE($3, assigned_glpi_user_name),
-          assignment_notified_at = COALESCE($4, assignment_notified_at)
+          status = 'DONE',
+          automation_expired_at = NOW(),
+          automation_expiration_reason = $2,
+          expiration_started_at = NULL,
+          last_expiration_check_at = NOW(),
+          next_processing_at = NULL,
+          processing_started_at = NULL,
+          mtalk_closed_at = CASE
+            WHEN $3 THEN COALESCE(mtalk_closed_at, NOW())
+            ELSE mtalk_closed_at
+          END
         WHERE mtalk_ticket_id = $1
       `,
-      [
-        mtalkTicketId,
-        update?.assignedGlpiUserId ?? null,
-        update?.assignedGlpiUserName ?? null,
-        update?.assignmentNotifiedAt ?? null
-      ]
+      [mtalkTicketId, update.reason, update.mtalkClosed]
     )
   })
 }
 
-export async function markConversationAssignmentCheckFailed(
+export async function markConversationExpirationCheckFailed(
   mtalkTicketId: string
 ) {
   return withDbTransaction(async (client) => {
@@ -592,8 +694,132 @@ export async function markConversationAssignmentCheckFailed(
       `
         UPDATE conversation_sessions
         SET
-          assignment_check_started_at = NULL,
-          last_assignment_check_at = NOW()
+          expiration_started_at = NULL,
+          last_expiration_check_at = NOW()
+        WHERE mtalk_ticket_id = $1
+      `,
+      [mtalkTicketId]
+    )
+  })
+}
+
+export async function markConversationExpirationNoticeSent(
+  mtalkTicketId: string
+) {
+  return withDbTransaction((client) =>
+    client.query(
+      `
+        UPDATE conversation_sessions
+        SET expiration_notice_sent_at = COALESCE(
+          expiration_notice_sent_at,
+          NOW()
+        )
+        WHERE mtalk_ticket_id = $1
+      `,
+      [mtalkTicketId]
+    )
+  )
+}
+
+export async function claimNextConversationSessionForSolutionCheck() {
+  return withDbTransaction(async (client) => {
+    const result = await client.query<{
+      mtalk_ticket_id: string
+      contact_number: string | null
+      glpi_ticket_id: string
+      solution_check_started_at: Date
+    }>(
+      `
+        WITH candidate AS (
+          SELECT mtalk_ticket_id
+          FROM conversation_sessions
+          WHERE glpi_ticket_id IS NOT NULL
+            AND solution_tracking_started_at IS NOT NULL
+            AND solution_notified_at IS NULL
+            AND status = 'DONE'
+            AND (
+              solution_check_started_at IS NULL
+              OR solution_check_started_at < NOW() - ($1 * INTERVAL '1 second')
+            )
+            AND (
+              last_solution_check_at IS NULL
+              OR last_solution_check_at <= NOW() - ($2 * INTERVAL '1 second')
+            )
+          ORDER BY COALESCE(
+            last_solution_check_at,
+            solution_tracking_started_at
+          ) ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        )
+        UPDATE conversation_sessions AS conversation_session
+        SET solution_check_started_at = NOW()
+        FROM candidate
+        WHERE conversation_session.mtalk_ticket_id = candidate.mtalk_ticket_id
+        RETURNING
+          conversation_session.mtalk_ticket_id,
+          conversation_session.contact_number,
+          conversation_session.glpi_ticket_id,
+          conversation_session.solution_check_started_at
+      `,
+      [
+        env.solutionWorkerStaleProcessingSeconds,
+        Math.ceil(env.solutionPollIntervalMs / 1000)
+      ]
+    )
+
+    if ((result.rowCount ?? 0) === 0) {
+      return null
+    }
+
+    const row = result.rows[0]
+
+    return {
+      mtalkTicketId: row.mtalk_ticket_id,
+      contactNumber: row.contact_number,
+      glpiTicketId: Number(row.glpi_ticket_id),
+      solutionCheckStartedAt: row.solution_check_started_at
+    } satisfies ConversationSolutionCheckSession
+  })
+}
+
+export async function markConversationSolutionChecked(
+  mtalkTicketId: string,
+  update: {
+    glpiStatus: number
+    solutionNotifiedAt?: Date | null
+  }
+) {
+  return withDbTransaction(async (client) => {
+    await client.query(
+      `
+        UPDATE conversation_sessions
+        SET
+          solution_check_started_at = NULL,
+          last_solution_check_at = NOW(),
+          glpi_last_status = $2,
+          solution_notified_at = COALESCE($3, solution_notified_at)
+        WHERE mtalk_ticket_id = $1
+      `,
+      [
+        mtalkTicketId,
+        update.glpiStatus,
+        update.solutionNotifiedAt ?? null
+      ]
+    )
+  })
+}
+
+export async function markConversationSolutionCheckFailed(
+  mtalkTicketId: string
+) {
+  return withDbTransaction(async (client) => {
+    await client.query(
+      `
+        UPDATE conversation_sessions
+        SET
+          solution_check_started_at = NULL,
+          last_solution_check_at = NOW()
         WHERE mtalk_ticket_id = $1
       `,
       [mtalkTicketId]
@@ -869,4 +1095,47 @@ export async function persistOutboundConversationMessage(
       [input.mtalkTicketId, input.content, JSON.stringify(input.rawPayload), sentAt]
     )
   })
+}
+
+export async function markConversationWelcomeSent(mtalkTicketId: string) {
+  return withDbTransaction((client) =>
+    client.query(
+      `
+        UPDATE conversation_sessions
+        SET welcome_sent_at = COALESCE(welcome_sent_at, NOW())
+        WHERE mtalk_ticket_id = $1
+      `,
+      [mtalkTicketId]
+    )
+  )
+}
+
+export async function incrementConversationClarificationAttempts(
+  mtalkTicketId: string
+) {
+  return withDbTransaction((client) =>
+    client.query(
+      `
+        UPDATE conversation_sessions
+        SET clarification_attempts = clarification_attempts + 1
+        WHERE mtalk_ticket_id = $1
+      `,
+      [mtalkTicketId]
+    )
+  )
+}
+
+export async function incrementConversationCompanyPromptAttempts(
+  mtalkTicketId: string
+) {
+  return withDbTransaction((client) =>
+    client.query(
+      `
+        UPDATE conversation_sessions
+        SET company_prompt_attempts = company_prompt_attempts + 1
+        WHERE mtalk_ticket_id = $1
+      `,
+      [mtalkTicketId]
+    )
+  )
 }

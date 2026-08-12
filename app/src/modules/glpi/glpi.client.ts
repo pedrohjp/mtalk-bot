@@ -7,7 +7,7 @@ import {
   GlpiLinkDocumentItemResponse,
   GlpiMyEntitiesResponse,
   GlpiSessionResponse,
-  GlpiTicketUserItem
+  GlpiTicket
 } from './glpi.types'
 
 export class GlpiUnavailableError extends Error {
@@ -121,6 +121,22 @@ export async function createGlpiTicket(
   })
 }
 
+export async function getGlpiTicket(
+  sessionToken: string,
+  ticketId: number
+) {
+  requireGlpiConfig()
+
+  return fetchJson<GlpiTicket>(`${env.glpiBaseUrl}/Ticket/${ticketId}`, {
+    method: 'GET',
+    headers: {
+      'App-Token': env.glpiAppToken!,
+      'Content-Type': 'application/json',
+      'Session-Token': sessionToken
+    }
+  })
+}
+
 export async function createGlpiDocument(
   sessionToken: string,
   formData: FormData
@@ -156,25 +172,6 @@ export async function linkGlpiDocumentToTicket(
         'Session-Token': sessionToken
       },
       body: JSON.stringify(payload)
-    }
-  )
-}
-
-export async function getGlpiTicketUsers(
-  sessionToken: string,
-  ticketId: number
-) {
-  requireGlpiConfig()
-
-  return fetchJson<GlpiTicketUserItem[]>(
-    `${env.glpiBaseUrl}/Ticket/${ticketId}/Ticket_User`,
-    {
-      method: 'GET',
-      headers: {
-        'App-Token': env.glpiAppToken!,
-        'Content-Type': 'application/json',
-        'Session-Token': sessionToken
-      }
     }
   )
 }

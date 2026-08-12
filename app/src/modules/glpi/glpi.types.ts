@@ -23,6 +23,14 @@ export type GlpiCreateTicketResponse = {
   message?: string
 }
 
+export type GlpiTicket = {
+  id?: number | string
+  status?: number | string
+  solvedate?: string | null
+  closedate?: string | null
+  [key: string]: unknown
+}
+
 export type GlpiCreateDocumentResponse = {
   id?: number
   message?: string
@@ -39,15 +47,6 @@ export type GlpiLinkDocumentItemRequest = {
 export type GlpiLinkDocumentItemResponse = {
   id?: number
   message?: string
-}
-
-export type GlpiTicketUserItem = {
-  id?: number
-  tickets_id?: number
-  users_id?: number
-  type?: number | string
-  alternative_email?: string | null
-  [key: string]: unknown
 }
 
 export type GlpiEntityApiItem = {

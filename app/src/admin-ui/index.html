@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mtalk-bot Admin</title>
+    <link rel="stylesheet" href="/admin-ui/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section id="login-view" class="card hidden">
+        <h1>mtalk-bot Admin</h1>
+        <p class="muted">Login simples para administracao local do sistema.</p>
+
+        <form id="login-form" class="stack">
+          <label class="stack">
+            <span>Usuario</span>
+            <input
+              id="username"
+              name="username"
+              type="text"
+              autocomplete="username"
+              value="admin"
+              required
+            />
+          </label>
+
+          <label class="stack">
+            <span>Senha</span>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              value="123456"
+              required
+            />
+          </label>
+
+          <button type="submit">Entrar</button>
+        </form>
+      </section>
+
+      <section id="app-view" class="hidden">
+        <header class="toolbar">
+          <div>
+            <h1>mtalk-bot Admin</h1>
+            <p class="muted">
+              Painel para configurar mensagens, prompt, filas e whitelist.
+            </p>
+          </div>
+          <button id="logout-button" class="secondary" type="button">
+            Sair
+          </button>
+        </header>
+
+        <section class="grid">
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <h2>Roteamento do MTALK</h2>
+                <p class="muted">
+                  Defina as filas usadas no fluxo inicial, na IA e no handoff humano.
+                </p>
+              </div>
+              <button id="refresh-routing-button" class="secondary" type="button">
+                Recarregar
+              </button>
+            </div>
+
+            <form id="routing-form" class="stack">
+              <label class="stack">
+                <span>Fila inicial</span>
+                <select id="initial-queue-id"></select>
+              </label>
+
+              <label class="stack">
+                <span>Fila da IA</span>
+                <select id="ai-queue-id"></select>
+              </label>
+
+              <label class="stack">
+                <span>Fila humana</span>
+                <select id="human-queue-id"></select>
+              </label>
+
+              <button id="save-routing-button" type="submit">
+                Salvar roteamento
+              </button>
+            </form>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <h2>Mensagem de apresentação</h2>
+                <p class="muted">
+                  Enviada uma única vez quando um novo atendimento chega à IA.
+                </p>
+              </div>
+              <button id="refresh-welcome-button" class="secondary" type="button">
+                Recarregar
+              </button>
+            </div>
+
+            <form id="welcome-form" class="stack">
+              <label class="stack">
+                <span>Conteúdo</span>
+                <textarea id="welcome-content" class="compact-textarea" rows="10" required></textarea>
+              </label>
+              <button id="save-welcome-button" type="submit">
+                Salvar apresentação
+              </button>
+            </form>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <h2>Prompt da IA</h2>
+                <p id="prompt-meta" class="muted">Carregando...</p>
+              </div>
+              <button id="refresh-prompt-button" class="secondary" type="button">
+                Recarregar
+              </button>
+            </div>
+
+            <form id="prompt-form" class="stack">
+              <label class="stack">
+                <span>Conteúdo</span>
+                <textarea id="prompt-content" rows="24" required></textarea>
+              </label>
+              <button id="save-prompt-button" type="submit">
+                Salvar prompt
+              </button>
+            </form>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <h2>Whitelist interna</h2>
+                <p class="muted">
+                  Números autorizados a usar o modo <code>novo chamado</code>.
+                </p>
+              </div>
+              <button id="refresh-staff-button" class="secondary" type="button">
+                Recarregar
+              </button>
+            </div>
+
+            <form id="staff-form" class="stack row">
+              <input
+                id="staff-number"
+                name="staff-number"
+                type="text"
+                placeholder="5584999999999"
+                required
+              />
+              <button id="add-staff-button" type="submit">Adicionar</button>
+            </form>
+
+            <ul id="staff-list" class="list"></ul>
+          </article>
+        </section>
+      </section>
+
+      <div id="feedback" class="feedback hidden"></div>
+    </main>
+
+    <script src="/admin-ui/app.js"></script>
+  </body>
+</html>

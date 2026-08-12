@@ -4,8 +4,13 @@ import {
   ClaimedConversationSession,
   claimNextConversationSessionForProcessing,
   listConversationAttachmentsPendingGlpiSync,
+  PendingConversationMessage,
   listPendingConversationMessagesForProcessing,
+  incrementConversationClarificationAttempts,
+  incrementConversationCompanyPromptAttempts,
+  markConversationHumanHandoffTransferred,
   markConversationGlpiTicketCreated,
+  markConversationMtalkClosed,
   markConversationProcessingCompleted,
   markConversationProcessingFailed,
   updateConversationSessionAfterAnalysis
@@ -23,6 +28,16 @@ import {
 import { CompanyResolutionResult } from '../glpi/glpi.types'
 import { createGlpiTicket, initGlpiSession } from '../glpi/glpi.client'
 import { syncConversationAttachmentsToGlpi } from '../glpi/glpi-attachment-sync'
+import { getMtalkRoutingConfig } from '../admin/mtalk-routing.repository'
+import {
+  closeTicketzTicket,
+  TicketzRequestError,
+  transferTicketzTicketToQueue
+} from '../mtalk/ticketz.client'
+import {
+  deliverConversationWelcome,
+  hasSubstantiveFirstMessage
+} from './conversation.welcome'
 
 type StopWorker = () => Promise<void>
 
@@ -31,6 +46,15 @@ function wait(ms: number) {
     setTimeout(resolve, ms)
   })
 }
+
+const GREETING_COMPANY_CANDIDATES = new Set([
+  'oi',
+  'ola',
+  'bom dia',
+  'boa tarde',
+  'boa noite',
+  'tudo bem'
+])
 
 async function processOneConversationBatch(logger: FastifyBaseLogger) {
   const session = await claimNextConversationSessionForProcessing()
@@ -54,16 +78,34 @@ async function processOneConversationBatch(logger: FastifyBaseLogger) {
       session.processingStartedAt
     )
 
+    const welcomeDelivered = await deliverConversationWelcome(logger, session)
+
+    if (welcomeDelivered && !hasSubstantiveFirstMessage(messages)) {
+      await markConversationProcessingCompleted(
+        session.mtalkTicketId,
+        messages.map((message) => message.id)
+      )
+
+      logger.info({
+        msg: 'Conversation first batch completed after welcome message',
+        mtalkTicketId: session.mtalkTicketId,
+        messageCount: messages.length
+      })
+
+      return true
+    }
+
     const processingResult = await processConversationTurn({
       session,
       messages
     })
 
     if (processingResult.aiAnalysis) {
-      resolvedCompany = await resolveConversationCompany(
+      resolvedCompany = await resolveConversationCompanyWithFallback(
         logger,
         session,
-        processingResult.extractedData.companyName
+        processingResult.extractedData.companyName,
+        messages
       )
 
       await updateConversationSessionAfterAnalysis(session.mtalkTicketId, {
@@ -133,8 +175,51 @@ async function processOneConversationBatch(logger: FastifyBaseLogger) {
       session,
       nextAction: processingResult.nextAction,
       assistantResponse: processingResult.aiAnalysis?.assistantResponse ?? null,
-      glpiTicketId: createdGlpiTicketId
+      glpiTicketId: createdGlpiTicketId,
+      confirmationCompanyName:
+        resolvedCompany.glpiEntityName ??
+        resolvedCompany.companyName ??
+        processingResult.extractedData.companyName,
+      confirmationSummary: processingResult.extractedData.problemSummary
     })
+
+    if (
+      outboundResult.delivered &&
+      processingResult.aiAnalysis?.clarificationRequested
+    ) {
+      await incrementConversationClarificationAttempts(session.mtalkTicketId)
+    }
+
+    if (outboundResult.delivered && processingResult.companyPromptRequested) {
+      await incrementConversationCompanyPromptAttempts(session.mtalkTicketId)
+    }
+
+    const shouldCloseAfterTicketCreation =
+      (processingResult.shouldCreateTicket || session.status === 'DONE') &&
+      Boolean(createdGlpiTicketId)
+    let mtalkClosedAt = session.mtalkClosedAt
+
+    if (shouldCloseAfterTicketCreation && !session.mtalkClosedAt) {
+      await closeConversationAfterTicketCreation(
+        logger,
+        session,
+        createdGlpiTicketId!
+      )
+      mtalkClosedAt = new Date()
+    }
+
+    if (
+      processingResult.shouldRequestHumanHandoff ||
+      session.status === 'HANDOFF_TO_HUMAN'
+    ) {
+      if (!session.humanHandoffTransferredAt) {
+        await transferConversationToHumanQueue(
+          logger,
+          session,
+          'human_request'
+        )
+      }
+    }
 
     await markConversationProcessingCompleted(
       session.mtalkTicketId,
@@ -152,6 +237,8 @@ async function processOneConversationBatch(logger: FastifyBaseLogger) {
       assistantResponse: processingResult.aiAnalysis?.assistantResponse ?? null,
       outboundDelivered: outboundResult.delivered,
       outboundBody: outboundResult.body,
+      mtalkClosedAt,
+      humanHandoffTransferredAt: session.humanHandoffTransferredAt,
       companyName: resolvedCompany.companyName ?? session.companyName,
       glpiTicketId: createdGlpiTicketId,
       glpiEntityName: resolvedCompany.glpiEntityName,
@@ -163,6 +250,7 @@ async function processOneConversationBatch(logger: FastifyBaseLogger) {
       shouldCreateTicket: processingResult.shouldCreateTicket,
       shouldRequestHumanHandoff:
         processingResult.shouldRequestHumanHandoff,
+      companyPromptRequested: processingResult.companyPromptRequested,
       missingFields: processingResult.aiAnalysis?.missingFields ?? []
     })
   } catch (error) {
@@ -281,6 +369,81 @@ async function createOrReuseGlpiTicket(
   return glpiTicketId
 }
 
+async function closeConversationAfterTicketCreation(
+  logger: FastifyBaseLogger,
+  session: ClaimedConversationSession,
+  glpiTicketId: number
+) {
+  const closedTicket = await closeTicketzTicket(session.mtalkTicketId)
+  await markConversationMtalkClosed(session.mtalkTicketId)
+
+  logger.info({
+    msg: 'MTALK conversation closed after GLPI ticket creation',
+    mtalkTicketId: session.mtalkTicketId,
+    glpiTicketId,
+    mtalkStatus: closedTicket.status,
+    mtalkQueueId: closedTicket.queueId ?? null,
+    mtalkUserId: closedTicket.userId ?? null
+  })
+}
+
+async function transferConversationToHumanQueue(
+  logger: FastifyBaseLogger,
+  session: ClaimedConversationSession,
+  reason: 'human_request'
+) {
+  const routingConfig = await getMtalkRoutingConfig()
+
+  if (!routingConfig.humanQueueId) {
+    throw new Error(
+      'Human queue is not configured in mtalk routing settings'
+    )
+  }
+
+  try {
+    await transferTicketzTicketToQueue(
+      session.mtalkTicketId,
+      routingConfig.humanQueueId
+    )
+
+    await markConversationHumanHandoffTransferred(session.mtalkTicketId)
+
+    logger.info({
+      msg: 'MTALK conversation transferred to human queue',
+      mtalkTicketId: session.mtalkTicketId,
+      humanQueueId: routingConfig.humanQueueId,
+      reason
+    })
+  } catch (error) {
+    const isPermissionError =
+      error instanceof TicketzRequestError &&
+      error.statusCode === 403 &&
+      typeof error.responseBody === 'object' &&
+      error.responseBody !== null &&
+      'error' in error.responseBody &&
+      error.responseBody.error === 'ERR_NO_PERMISSION'
+
+    if (!isPermissionError) {
+      throw error
+    }
+
+    await markConversationHumanHandoffTransferred(session.mtalkTicketId)
+
+    logger.warn({
+      msg: 'Skipping MTALK human queue transfer after permission denial',
+      mtalkTicketId: session.mtalkTicketId,
+      humanQueueId: routingConfig.humanQueueId,
+      reason,
+      error: {
+        name: error.name,
+        message: error.message,
+        statusCode: error.statusCode,
+        responseBody: error.responseBody
+      }
+    })
+  }
+}
+
 async function resolveConversationCompany(
   logger: FastifyBaseLogger,
   session: ClaimedConversationSession,
@@ -351,6 +514,92 @@ async function resolveConversationCompany(
       companyLookupAttemptedAt: session.companyLookupAttemptedAt
     }
   }
+}
+
+function isGreetingOnlyCompanyCandidate(value: string) {
+  return GREETING_COMPANY_CANDIDATES.has(normalizeCompanyName(value))
+}
+
+function buildImplicitCompanyCandidates(
+  session: ClaimedConversationSession,
+  messages: PendingConversationMessage[],
+  explicitCompanyName: string | null
+) {
+  if (explicitCompanyName) {
+    return []
+  }
+
+  if (session.companyName || !['NEW', 'COLLECTING_COMPANY'].includes(session.status)) {
+    return []
+  }
+
+  return messages
+    .map((message) => message.content?.trim() ?? null)
+    .filter((content): content is string => Boolean(content))
+    .filter((content) => content.length >= 3 && content.length <= 80)
+    .filter((content) => !isGreetingOnlyCompanyCandidate(content))
+    .filter((content, index, allContents) => {
+      const normalizedContent = normalizeCompanyName(content)
+
+      return (
+        normalizedContent.length > 0 &&
+        allContents.findIndex(
+          (item) => normalizeCompanyName(item) === normalizedContent
+        ) === index
+      )
+    })
+    .slice(0, 3)
+}
+
+async function resolveConversationCompanyWithFallback(
+  logger: FastifyBaseLogger,
+  session: ClaimedConversationSession,
+  companyName: string | null,
+  messages: PendingConversationMessage[]
+): Promise<CompanyResolutionResult> {
+  const primaryResolution = await resolveConversationCompany(
+    logger,
+    session,
+    companyName
+  )
+
+  if (
+    primaryResolution.companyIdentificationStatus === 'IDENTIFIED' ||
+    companyName
+  ) {
+    return primaryResolution
+  }
+
+  const implicitCandidates = buildImplicitCompanyCandidates(
+    session,
+    messages,
+    companyName
+  )
+
+  for (const candidate of implicitCandidates) {
+    const candidateResolution = await resolveConversationCompany(
+      logger,
+      session,
+      candidate
+    )
+
+    logger.info({
+      msg: 'Conversation implicit company candidate evaluated',
+      mtalkTicketId: session.mtalkTicketId,
+      candidate,
+      resolvedCompanyName: candidateResolution.companyName,
+      glpiEntityId: candidateResolution.glpiEntityId,
+      glpiEntityName: candidateResolution.glpiEntityName,
+      companyIdentificationStatus:
+        candidateResolution.companyIdentificationStatus
+    })
+
+    if (candidateResolution.companyIdentificationStatus === 'IDENTIFIED') {
+      return candidateResolution
+    }
+  }
+
+  return primaryResolution
 }
 
 export function startConversationWorker(logger: FastifyBaseLogger): StopWorker {
