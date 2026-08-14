@@ -367,3 +367,8 @@ Servico backend para integrar o MTALK (entrada via webhook de atendimentos Whats
 - Em producao, o PostgreSQL nao publica a porta `5432` e o app publica somente `127.0.0.1:3001` por padrao, evitando conflito com o Grafana na porta `3000` e permitindo proxy pelo Apache.
 - O volume de producao possui nome proprio (`mtalk_bot_prod_postgres_data`) para nao compartilhar dados com outros projetos.
 - O guia `DEPLOY.md` documenta a subida, validacao, atualizacao e o cuidado de nunca usar `docker compose down -v` no banco de producao.
+
+## Implementado na etapa 25
+- O aviso de encaminhamento para a fila humana passou a ser idempotente por sessao.
+- A migration `013_human_handoff_notice_idempotency.sql` adiciona `human_handoff_notice_sent_at` e recupera avisos ja persistidos antes da correcao.
+- Se a transferencia para a fila humana falhar depois do envio do aviso, retries posteriores tentam a transferencia sem reenviar a mesma mensagem.

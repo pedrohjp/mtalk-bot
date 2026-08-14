@@ -14,10 +14,18 @@ type DeliverConversationResponseInput = {
   glpiTicketId?: number | null
   confirmationCompanyName?: string | null
   confirmationSummary?: string | null
+  suppressHumanHandoffNotice?: boolean
 }
 
 function resolveOutboundMessage(input: DeliverConversationResponseInput) {
   if (input.nextAction === 'WAIT_FOR_USER') {
+    return null
+  }
+
+  if (
+    input.nextAction === 'HANDOFF_TO_HUMAN' &&
+    input.suppressHumanHandoffNotice
+  ) {
     return null
   }
 

@@ -31,6 +31,7 @@ type ClaimedConversationSessionRow = {
   welcome_sent_at: Date | null
   mtalk_closed_at: Date | null
   human_handoff_transferred_at: Date | null
+  human_handoff_notice_sent_at: Date | null
   automation_expired_at: Date | null
   automation_expiration_reason: string | null
   glpi_ticket_id: string | null
@@ -92,6 +93,7 @@ export type ClaimedConversationSession = {
   welcomeSentAt: Date | null
   mtalkClosedAt: Date | null
   humanHandoffTransferredAt: Date | null
+  humanHandoffNoticeSentAt: Date | null
   automationExpiredAt: Date | null
   automationExpirationReason: string | null
   glpiTicketId: number | null
@@ -352,6 +354,7 @@ function mapClaimedConversationSession(
     welcomeSentAt: row.welcome_sent_at,
     mtalkClosedAt: row.mtalk_closed_at,
     humanHandoffTransferredAt: row.human_handoff_transferred_at,
+    humanHandoffNoticeSentAt: row.human_handoff_notice_sent_at,
     automationExpiredAt: row.automation_expired_at,
     automationExpirationReason: row.automation_expiration_reason,
     glpiTicketId: row.glpi_ticket_id ? Number(row.glpi_ticket_id) : null,
@@ -394,6 +397,7 @@ function mapAssignmentCheckConversationSession(
     welcomeSentAt: row.welcome_sent_at,
     mtalkClosedAt: row.mtalk_closed_at,
     humanHandoffTransferredAt: row.human_handoff_transferred_at,
+    humanHandoffNoticeSentAt: row.human_handoff_notice_sent_at,
     automationExpiredAt: row.automation_expired_at,
     automationExpirationReason: row.automation_expiration_reason,
     glpiTicketId: row.glpi_ticket_id ? Number(row.glpi_ticket_id) : null,
@@ -487,6 +491,7 @@ export async function claimNextConversationSessionForProcessing() {
           conversation_session.welcome_sent_at,
           conversation_session.mtalk_closed_at,
           conversation_session.human_handoff_transferred_at,
+          conversation_session.human_handoff_notice_sent_at,
           conversation_session.automation_expired_at,
           conversation_session.automation_expiration_reason,
           conversation_session.glpi_ticket_id,
@@ -580,6 +585,24 @@ export async function markConversationHumanHandoffTransferred(
   })
 }
 
+export async function markConversationHumanHandoffNoticeSent(
+  mtalkTicketId: string
+) {
+  return withDbTransaction(async (client) => {
+    await client.query(
+      `
+        UPDATE conversation_sessions
+        SET human_handoff_notice_sent_at = COALESCE(
+          human_handoff_notice_sent_at,
+          NOW()
+        )
+        WHERE mtalk_ticket_id = $1
+      `,
+      [mtalkTicketId]
+    )
+  })
+}
+
 export async function claimNextConversationSessionForExpiration() {
   return withDbTransaction(async (client) => {
     const result = await client.query<ClaimedConversationSessionRow>(
@@ -616,6 +639,7 @@ export async function claimNextConversationSessionForExpiration() {
           conversation_session.welcome_sent_at,
           conversation_session.mtalk_closed_at,
           conversation_session.human_handoff_transferred_at,
+          conversation_session.human_handoff_notice_sent_at,
           conversation_session.automation_expired_at,
           conversation_session.automation_expiration_reason,
           conversation_session.glpi_ticket_id,

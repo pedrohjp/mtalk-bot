@@ -8,6 +8,7 @@ import {
   listPendingConversationMessagesForProcessing,
   incrementConversationClarificationAttempts,
   incrementConversationCompanyPromptAttempts,
+  markConversationHumanHandoffNoticeSent,
   markConversationHumanHandoffTransferred,
   markConversationGlpiTicketCreated,
   markConversationMtalkClosed,
@@ -180,8 +181,18 @@ async function processOneConversationBatch(logger: FastifyBaseLogger) {
         resolvedCompany.glpiEntityName ??
         resolvedCompany.companyName ??
         processingResult.extractedData.companyName,
-      confirmationSummary: processingResult.extractedData.problemSummary
+      confirmationSummary: processingResult.extractedData.problemSummary,
+      suppressHumanHandoffNotice:
+        processingResult.nextAction === 'HANDOFF_TO_HUMAN' &&
+        Boolean(session.humanHandoffNoticeSentAt)
     })
+
+    if (
+      outboundResult.delivered &&
+      processingResult.nextAction === 'HANDOFF_TO_HUMAN'
+    ) {
+      await markConversationHumanHandoffNoticeSent(session.mtalkTicketId)
+    }
 
     if (
       outboundResult.delivered &&
