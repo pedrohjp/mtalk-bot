@@ -372,3 +372,7 @@ Servico backend para integrar o MTALK (entrada via webhook de atendimentos Whats
 - O aviso de encaminhamento para a fila humana passou a ser idempotente por sessao.
 - A migration `013_human_handoff_notice_idempotency.sql` adiciona `human_handoff_notice_sent_at` e recupera avisos ja persistidos antes da correcao.
 - Se a transferencia para a fila humana falhar depois do envio do aviso, retries posteriores tentam a transferencia sem reenviar a mesma mensagem.
+
+## Implementado na etapa 26
+- O `app/Dockerfile.production` passou a copiar `src/admin-ui` para a imagem final.
+- Isso corrige o erro `ENOENT` ao acessar `/admin-ui` em producao, pois a rota serve os arquivos estaticos diretamente desse diretorio em runtime.

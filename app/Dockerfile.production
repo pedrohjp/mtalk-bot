@@ -18,6 +18,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/migrations ./migrations
+COPY --from=build --chown=node:node /app/src/admin-ui ./src/admin-ui
 
 USER node
 EXPOSE 3000
