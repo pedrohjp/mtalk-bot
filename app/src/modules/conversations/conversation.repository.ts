@@ -263,7 +263,7 @@ async function updateConversationSessionAfterInboundMessage(
         last_message_at = GREATEST(last_message_at, $5),
         next_processing_at = CASE
           WHEN status IN ('DONE', 'HANDOFF_TO_HUMAN', 'ERROR') THEN NULL
-          ELSE $6
+          ELSE $6::timestamptz
         END
       WHERE mtalk_ticket_id = $1
     `,
