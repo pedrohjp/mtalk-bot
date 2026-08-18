@@ -83,6 +83,12 @@ type PendingConversationAttachmentRow = {
   glpi_linked_at: Date | null
 }
 
+type ManualAssignmentCheckRow = {
+  mtalk_ticket_id: string
+  status: ConversationStatus
+  manual_assignment_check_started_at: Date | null
+}
+
 export type ClaimedConversationSession = {
   mtalkTicketId: string
   status: ConversationStatus
@@ -125,6 +131,12 @@ export type ConversationSolutionCheckSession = {
   contactNumber: string | null
   glpiTicketId: number
   solutionCheckStartedAt: Date
+}
+
+export type ManualAssignmentCheckSession = {
+  mtalkTicketId: string
+  status: ConversationStatus
+  manualAssignmentCheckStartedAt: Date
 }
 
 export type PendingConversationMessage = {
@@ -249,7 +261,10 @@ async function updateConversationSessionAfterInboundMessage(
         contact_name = COALESCE($3, contact_name),
         contact_number = COALESCE($4, contact_number),
         last_message_at = GREATEST(last_message_at, $5),
-        next_processing_at = $6
+        next_processing_at = CASE
+          WHEN status IN ('DONE', 'HANDOFF_TO_HUMAN', 'ERROR') THEN NULL
+          ELSE $6
+        END
       WHERE mtalk_ticket_id = $1
     `,
     [
@@ -678,6 +693,128 @@ export async function claimNextConversationSessionForExpiration() {
 
     return mapAssignmentCheckConversationSession(result.rows[0])
   })
+}
+
+export async function claimNextConversationSessionForManualAssignmentCheck() {
+  return withDbTransaction(async (client) => {
+    const result = await client.query<ManualAssignmentCheckRow>(
+      `
+        WITH candidate AS (
+          SELECT mtalk_ticket_id
+          FROM conversation_sessions
+          WHERE mtalk_manual_assignment_detected_at IS NULL
+            AND status NOT IN ('DONE', 'HANDOFF_TO_HUMAN', 'ERROR')
+            AND (
+              manual_assignment_check_started_at IS NULL
+              OR manual_assignment_check_started_at < NOW() - ($1 * INTERVAL '1 second')
+            )
+            AND (
+              last_manual_assignment_check_at IS NULL
+              OR last_manual_assignment_check_at <= NOW() - ($2 * INTERVAL '1 second')
+            )
+          ORDER BY COALESCE(last_manual_assignment_check_at, last_message_at) ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        )
+        UPDATE conversation_sessions AS conversation_session
+        SET manual_assignment_check_started_at = NOW()
+        FROM candidate
+        WHERE conversation_session.mtalk_ticket_id = candidate.mtalk_ticket_id
+        RETURNING
+          conversation_session.mtalk_ticket_id,
+          conversation_session.status,
+          conversation_session.manual_assignment_check_started_at
+      `,
+      [
+        env.manualAssignmentWorkerStaleProcessingSeconds,
+        Math.ceil(env.manualAssignmentPollIntervalMs / 1000)
+      ]
+    )
+
+    if ((result.rowCount ?? 0) === 0) {
+      return null
+    }
+
+    const row = result.rows[0]
+
+    if (!row.manual_assignment_check_started_at) {
+      throw new Error(
+        'Claimed conversation session is missing manual_assignment_check_started_at'
+      )
+    }
+
+    return {
+      mtalkTicketId: row.mtalk_ticket_id,
+      status: row.status,
+      manualAssignmentCheckStartedAt: row.manual_assignment_check_started_at
+    } satisfies ManualAssignmentCheckSession
+  })
+}
+
+export async function markConversationManualAssignmentChecked(
+  mtalkTicketId: string
+) {
+  return withDbTransaction((client) =>
+    client.query(
+      `
+        UPDATE conversation_sessions
+        SET
+          manual_assignment_check_started_at = NULL,
+          last_manual_assignment_check_at = NOW()
+        WHERE mtalk_ticket_id = $1
+      `,
+      [mtalkTicketId]
+    )
+  )
+}
+
+export async function markConversationManualAssignmentCheckFailed(
+  mtalkTicketId: string
+) {
+  return withDbTransaction((client) =>
+    client.query(
+      `
+        UPDATE conversation_sessions
+        SET
+          manual_assignment_check_started_at = NULL,
+          last_manual_assignment_check_at = NOW()
+        WHERE mtalk_ticket_id = $1
+      `,
+      [mtalkTicketId]
+    )
+  )
+}
+
+export async function markConversationManualAssignmentDetected(
+  mtalkTicketId: string,
+  mtalkUserId: string
+) {
+  return withDbTransaction((client) =>
+    client.query(
+      `
+        UPDATE conversation_sessions
+        SET
+          status = 'HANDOFF_TO_HUMAN',
+          mtalk_manual_assignment_detected_at = COALESCE(
+            mtalk_manual_assignment_detected_at,
+            NOW()
+          ),
+          mtalk_manual_assignment_user_id = COALESCE(
+            mtalk_manual_assignment_user_id,
+            $2
+          ),
+          manual_assignment_check_started_at = NULL,
+          last_manual_assignment_check_at = NOW(),
+          expiration_started_at = NULL,
+          next_processing_at = NULL,
+          processing_started_at = NULL,
+          awaiting_confirmation = FALSE
+        WHERE mtalk_ticket_id = $1
+          AND mtalk_manual_assignment_detected_at IS NULL
+      `,
+      [mtalkTicketId, mtalkUserId]
+    )
+  )
 }
 
 export async function markConversationAutomationExpired(

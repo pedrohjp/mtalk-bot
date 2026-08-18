@@ -81,6 +81,16 @@ export const env = {
     'AUTOMATION_EXPIRATION_WORKER_STALE_PROCESSING_SECONDS',
     300
   ),
+  manualAssignmentWatcherEnabled:
+    readOptionalEnv('MTALK_MANUAL_ASSIGNMENT_WATCHER_ENABLED') !== 'false',
+  manualAssignmentPollIntervalMs: readNumberEnv(
+    'MTALK_MANUAL_ASSIGNMENT_POLL_INTERVAL_MS',
+    20000
+  ),
+  manualAssignmentWorkerStaleProcessingSeconds: readNumberEnv(
+    'MTALK_MANUAL_ASSIGNMENT_WORKER_STALE_PROCESSING_SECONDS',
+    300
+  ),
   mtalkOutboundSaveOnTicket:
     (readOptionalEnv('MTALK_OUTBOUND_SAVE_ON_TICKET') ?? 'true') !== 'false'
 }

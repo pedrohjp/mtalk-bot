@@ -53,3 +53,18 @@ curl http://127.0.0.1:3001/health
 4. Confira os logs e o endpoint `/health`.
 
 Nao use `docker compose down -v`, pois o parametro `-v` remove o volume do banco.
+
+## Deteccao de atendimento assumido
+
+O app verifica periodicamente os atendimentos automatizados no MTALK. Quando
+um atendente assume manualmente uma conversa e o ticket passa a ter `userId`,
+a automacao e encerrada localmente e a sessao fica preservada como
+`HANDOFF_TO_HUMAN`.
+
+As configuracoes opcionais sao:
+
+```env
+MTALK_MANUAL_ASSIGNMENT_WATCHER_ENABLED=true
+MTALK_MANUAL_ASSIGNMENT_POLL_INTERVAL_MS=20000
+MTALK_MANUAL_ASSIGNMENT_WORKER_STALE_PROCESSING_SECONDS=300
+```

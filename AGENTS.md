@@ -376,3 +376,20 @@ Servico backend para integrar o MTALK (entrada via webhook de atendimentos Whats
 ## Implementado na etapa 26
 - O `app/Dockerfile.production` passou a copiar `src/admin-ui` para a imagem final.
 - Isso corrige o erro `ENOENT` ao acessar `/admin-ui` em producao, pois a rota serve os arquivos estaticos diretamente desse diretorio em runtime.
+
+## Implementado na etapa 27
+- Novo worker de polling detecta quando um usuario assume manualmente uma conversa no MTALK.
+- A verificacao consulta `GET /tickets/{mtalkTicketId}` e considera a conversa assumida quando o retorno possui `userId` valido.
+- Quando a atribuicao manual e detectada, a sessao:
+  - passa para `HANDOFF_TO_HUMAN`;
+  - deixa de ser reagendada para a IA;
+  - deixa de ser candidata a expiracao por inatividade;
+  - preserva o historico no PostgreSQL.
+- O recebimento de novas mensagens nao reativa sessoes em `DONE`, `HANDOFF_TO_HUMAN` ou `ERROR`.
+- O polling usa claim com `FOR UPDATE SKIP LOCKED`, marcadores de verificacao e retry seguro por sessao.
+- Novas configuracoes opcionais:
+  - `MTALK_MANUAL_ASSIGNMENT_WATCHER_ENABLED` (padrao `true`);
+  - `MTALK_MANUAL_ASSIGNMENT_POLL_INTERVAL_MS` (padrao `20000`);
+  - `MTALK_MANUAL_ASSIGNMENT_WORKER_STALE_PROCESSING_SECONDS` (padrao `300`).
+- A migration `014_mtalk_manual_assignment.sql` adiciona os campos de controle da deteccao.
+- Os logs detalhados de login do Ticketz/MTALK foram removidos para nao imprimir senhas, tokens e payloads sensiveis.

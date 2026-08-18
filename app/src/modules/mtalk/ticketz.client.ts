@@ -41,11 +41,11 @@ type TicketzAuthSession = {
   cookieHeader: string
 }
 
-type TicketzTicketResponse = {
+export type TicketzTicketResponse = {
   id?: number
   status?: string
   queueId?: number | null
-  userId?: number | null
+  userId?: number | string | null
   [key: string]: unknown
 }
 
@@ -166,15 +166,6 @@ async function authenticateTicketzPanel() {
     pushSubscription: DEFAULT_TICKETZ_PUSH_SUBSCRIPTION
   }
 
-  console.log(
-    [
-      '===== TICKETZ LOGIN REQUEST START =====',
-      `url: ${loginUrl}`,
-      `body: ${JSON.stringify(loginPayload, null, 2)}`,
-      '===== TICKETZ LOGIN REQUEST END ====='
-    ].join('\n')
-  )
-
   const response = await fetch(loginUrl, {
     method: 'POST',
     headers: {
@@ -187,21 +178,6 @@ async function authenticateTicketzPanel() {
   const responseBody = (await parseResponseBody(
     response
   )) as TicketzLoginResponse | string
-
-  console.log(
-    [
-      '===== TICKETZ LOGIN RESPONSE START =====',
-      `url: ${loginUrl}`,
-      `status: ${response.status}`,
-      `ok: ${response.ok}`,
-      `body: ${
-        typeof responseBody === 'string'
-          ? responseBody
-          : JSON.stringify(responseBody, null, 2)
-      }`,
-      '===== TICKETZ LOGIN RESPONSE END ====='
-    ].join('\n')
-  )
 
   if (!response.ok) {
     throw new TicketzRequestError(
@@ -253,6 +229,16 @@ export async function listTicketzQueues() {
     name: queue.name,
     color: queue.color ?? null
   }))
+}
+
+export async function getTicketzTicket(ticketId: string) {
+  const auth = await authenticateTicketzPanel()
+
+  return ticketzRequest<TicketzTicketResponse>(`/tickets/${ticketId}`, {
+    method: 'GET',
+    token: auth.token,
+    headers: buildTicketzAuthHeaders(auth)
+  })
 }
 
 export async function closeTicketzTicket(ticketId: string) {
