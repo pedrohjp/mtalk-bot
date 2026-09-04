@@ -3,9 +3,10 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pipeline } from 'node:stream/promises'
-import { Readable } from 'node:stream'
+import { Readable, Transform, TransformCallback } from 'node:stream'
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
 import { FastifyBaseLogger } from 'fastify'
+import { env } from '../../config/env'
 import {
   markConversationAttachmentFailed,
   markConversationAttachmentLinked,
@@ -44,6 +45,33 @@ export class GlpiAttachmentSyncError extends Error {
     if (cause !== undefined) {
       ;(this as Error & { cause?: unknown }).cause = cause
     }
+  }
+}
+
+class AttachmentSizeLimitStream extends Transform {
+  private receivedBytes = 0
+
+  constructor(private readonly maxBytes: number) {
+    super()
+  }
+
+  override _transform(
+    chunk: Buffer,
+    _encoding: BufferEncoding,
+    callback: TransformCallback
+  ) {
+    this.receivedBytes += chunk.length
+
+    if (this.receivedBytes > this.maxBytes) {
+      callback(
+        new Error(
+          `Attachment exceeds configured limit of ${this.maxBytes} bytes`
+        )
+      )
+      return
+    }
+
+    callback(null, chunk)
   }
 }
 
@@ -102,7 +130,9 @@ function buildDocumentName(fileName: string) {
 async function downloadAttachmentToTempFile(
   attachment: PendingConversationAttachment
 ): Promise<DownloadedAttachmentFile> {
-  const response = await fetch(attachment.mediaUrl)
+  const response = await fetch(attachment.mediaUrl, {
+    signal: AbortSignal.timeout(env.glpiAttachmentDownloadTimeoutMs)
+  })
 
   if (!response.ok || !response.body) {
     throw new Error(
@@ -111,14 +141,32 @@ async function downloadAttachmentToTempFile(
   }
 
   const mimeType = response.headers.get('content-type')?.split(';')[0] ?? null
+  const contentLength = Number(response.headers.get('content-length'))
+
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > env.glpiAttachmentMaxBytes
+  ) {
+    await response.body.cancel()
+    throw new Error(
+      `Attachment content-length ${contentLength} exceeds configured limit of ${env.glpiAttachmentMaxBytes} bytes`
+    )
+  }
+
   const fileName = buildAttachmentFileName(attachment, mimeType)
   const tempDirPath = await mkdtemp(join(tmpdir(), 'mtalk-bot-attachment-'))
   const tempFilePath = join(tempDirPath, fileName)
 
-  await pipeline(
-    Readable.fromWeb(response.body as NodeReadableStream),
-    createWriteStream(tempFilePath)
-  )
+  try {
+    await pipeline(
+      Readable.fromWeb(response.body as NodeReadableStream),
+      new AttachmentSizeLimitStream(env.glpiAttachmentMaxBytes),
+      createWriteStream(tempFilePath)
+    )
+  } catch (error) {
+    await rm(tempDirPath, { recursive: true, force: true })
+    throw error
+  }
 
   return {
     tempDirPath,

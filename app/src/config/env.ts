@@ -61,8 +61,9 @@ export const env = {
     readOptionalEnv('SOLUTION_NOTIFIER_ENABLED') !== 'false',
   solutionPollIntervalMs: readNumberEnv(
     'SOLUTION_POLL_INTERVAL_MS',
-    20000
+    300000
   ),
+  solutionPollBatchSize: readNumberEnv('SOLUTION_POLL_BATCH_SIZE', 20),
   solutionWorkerStaleProcessingSeconds: readNumberEnv(
     'SOLUTION_WORKER_STALE_PROCESSING_SECONDS',
     300
@@ -87,9 +88,25 @@ export const env = {
     'MTALK_MANUAL_ASSIGNMENT_POLL_INTERVAL_MS',
     20000
   ),
+  manualAssignmentPollBatchSize: readNumberEnv(
+    'MTALK_MANUAL_ASSIGNMENT_POLL_BATCH_SIZE',
+    20
+  ),
   manualAssignmentWorkerStaleProcessingSeconds: readNumberEnv(
     'MTALK_MANUAL_ASSIGNMENT_WORKER_STALE_PROCESSING_SECONDS',
     300
+  ),
+  glpiAttachmentMaxSyncAttempts: readNumberEnv(
+    'GLPI_ATTACHMENT_MAX_SYNC_ATTEMPTS',
+    3
+  ),
+  glpiAttachmentMaxBytes: readNumberEnv(
+    'GLPI_ATTACHMENT_MAX_BYTES',
+    25 * 1024 * 1024
+  ),
+  glpiAttachmentDownloadTimeoutMs: readNumberEnv(
+    'GLPI_ATTACHMENT_DOWNLOAD_TIMEOUT_MS',
+    60000
   ),
   mtalkOutboundSaveOnTicket:
     (readOptionalEnv('MTALK_OUTBOUND_SAVE_ON_TICKET') ?? 'true') !== 'false'

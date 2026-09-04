@@ -150,18 +150,26 @@ export function startConversationSolutionWorker(
   loopPromise = (async () => {
     logger.info({
       msg: 'Conversation solution worker started',
-      pollIntervalMs: env.solutionPollIntervalMs
+      pollIntervalMs: env.solutionPollIntervalMs,
+      batchSize: env.solutionPollBatchSize
     })
 
     while (!stopped) {
-      const processedAny = await processOneSolutionCheck(logger)
+      let processedCount = 0
+      const batchSize = Math.max(1, Math.floor(env.solutionPollBatchSize))
+
+      while (!stopped && processedCount < batchSize) {
+        const processedAny = await processOneSolutionCheck(logger)
+
+        if (!processedAny) {
+          break
+        }
+
+        processedCount += 1
+      }
 
       if (stopped) {
         break
-      }
-
-      if (processedAny) {
-        continue
       }
 
       await schedule(env.solutionPollIntervalMs)

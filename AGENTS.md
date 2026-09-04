@@ -393,3 +393,21 @@ Servico backend para integrar o MTALK (entrada via webhook de atendimentos Whats
   - `MTALK_MANUAL_ASSIGNMENT_WORKER_STALE_PROCESSING_SECONDS` (padrao `300`).
 - A migration `014_mtalk_manual_assignment.sql` adiciona os campos de controle da deteccao.
 - Os logs detalhados de login do Ticketz/MTALK foram removidos para nao imprimir senhas, tokens e payloads sensiveis.
+
+## Implementado na etapa 28
+- Corrigido um retry ilimitado de anexos: registros `FAILED` sem vinculo podiam ser baixados do MTALK e reenviados ao GLPI a cada retry da conversa.
+- A migration `015_network_safety.sql` adiciona em `conversation_attachments`:
+  - `sync_attempts`;
+  - `last_sync_attempt_at`;
+  - `sync_abandoned_at`.
+- A sincronizacao de cada anexo agora possui no maximo 3 tentativas por padrao; ao atingir o limite, o anexo deixa de ser selecionado automaticamente.
+- Downloads de anexos possuem limite padrao de 25 MiB, validado por `Content-Length` e tambem durante o streaming.
+- Arquivos temporarios passam a ser removidos mesmo quando o download falha no meio do stream.
+- O polling de solucao no GLPI passou a ter intervalo padrao de 5 minutos, lote maximo e pausa obrigatoria entre rodadas.
+- O polling de atribuicao manual no MTALK tambem ganhou lote maximo e pausa obrigatoria entre rodadas.
+- Novas configuracoes opcionais:
+  - `SOLUTION_POLL_BATCH_SIZE` (padrao `20`);
+  - `MTALK_MANUAL_ASSIGNMENT_POLL_BATCH_SIZE` (padrao `20`);
+  - `GLPI_ATTACHMENT_MAX_SYNC_ATTEMPTS` (padrao `3`);
+  - `GLPI_ATTACHMENT_MAX_BYTES` (padrao `26214400`);
+  - `GLPI_ATTACHMENT_DOWNLOAD_TIMEOUT_MS` (padrao `60000`).

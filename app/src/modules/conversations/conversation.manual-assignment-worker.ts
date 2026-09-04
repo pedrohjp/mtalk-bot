@@ -125,18 +125,29 @@ export function startConversationManualAssignmentWorker(
   loopPromise = (async () => {
     logger.info({
       msg: 'MTALK manual assignment worker started',
-      pollIntervalMs: env.manualAssignmentPollIntervalMs
+      pollIntervalMs: env.manualAssignmentPollIntervalMs,
+      batchSize: env.manualAssignmentPollBatchSize
     })
 
     while (!stopped) {
-      const processedAny = await processOneManualAssignmentCheck(logger)
+      let processedCount = 0
+      const batchSize = Math.max(
+        1,
+        Math.floor(env.manualAssignmentPollBatchSize)
+      )
+
+      while (!stopped && processedCount < batchSize) {
+        const processedAny = await processOneManualAssignmentCheck(logger)
+
+        if (!processedAny) {
+          break
+        }
+
+        processedCount += 1
+      }
 
       if (stopped) {
         break
-      }
-
-      if (processedAny) {
-        continue
       }
 
       await schedule(env.manualAssignmentPollIntervalMs)

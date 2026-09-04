@@ -68,3 +68,19 @@ MTALK_MANUAL_ASSIGNMENT_WATCHER_ENABLED=true
 MTALK_MANUAL_ASSIGNMENT_POLL_INTERVAL_MS=20000
 MTALK_MANUAL_ASSIGNMENT_WORKER_STALE_PROCESSING_SECONDS=300
 ```
+
+## Protecoes de trafego externo
+
+Os pollings externos usam lotes limitados e pausa obrigatoria entre rodadas. A
+verificacao de solucao no GLPI usa cinco minutos por padrao. Anexos possuem
+limite de tamanho e de tentativas para impedir que uma falha remota gere
+downloads e uploads indefinidos.
+
+```env
+SOLUTION_POLL_INTERVAL_MS=300000
+SOLUTION_POLL_BATCH_SIZE=20
+MTALK_MANUAL_ASSIGNMENT_POLL_BATCH_SIZE=20
+GLPI_ATTACHMENT_MAX_SYNC_ATTEMPTS=3
+GLPI_ATTACHMENT_MAX_BYTES=26214400
+GLPI_ATTACHMENT_DOWNLOAD_TIMEOUT_MS=60000
+```

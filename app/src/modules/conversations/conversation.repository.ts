@@ -81,6 +81,9 @@ type PendingConversationAttachmentRow = {
   glpi_document_id: string | null
   glpi_uploaded_at: Date | null
   glpi_linked_at: Date | null
+  sync_attempts: number
+  last_sync_attempt_at: Date | null
+  sync_abandoned_at: Date | null
 }
 
 type ManualAssignmentCheckRow = {
@@ -162,6 +165,9 @@ export type PendingConversationAttachment = {
   glpiDocumentId: number | null
   glpiUploadedAt: Date | null
   glpiLinkedAt: Date | null
+  syncAttempts: number
+  lastSyncAttemptAt: Date | null
+  syncAbandonedAt: Date | null
 }
 
 function buildNextProcessingAt(receivedAt: Date): Date {
@@ -471,7 +477,10 @@ function mapPendingConversationAttachment(
     lastError: row.last_error,
     glpiDocumentId: row.glpi_document_id ? Number(row.glpi_document_id) : null,
     glpiUploadedAt: row.glpi_uploaded_at,
-    glpiLinkedAt: row.glpi_linked_at
+    glpiLinkedAt: row.glpi_linked_at,
+    syncAttempts: row.sync_attempts,
+    lastSyncAttemptAt: row.last_sync_attempt_at,
+    syncAbandonedAt: row.sync_abandoned_at
   }
 }
 
@@ -1005,13 +1014,18 @@ export async function listConversationAttachmentsPendingGlpiSync(
           last_error,
           glpi_document_id,
           glpi_uploaded_at,
-          glpi_linked_at
+          glpi_linked_at,
+          sync_attempts,
+          last_sync_attempt_at,
+          sync_abandoned_at
         FROM conversation_attachments
         WHERE mtalk_ticket_id = $1
           AND glpi_linked_at IS NULL
+          AND sync_abandoned_at IS NULL
+          AND sync_attempts < $2
         ORDER BY id ASC
       `,
-      [mtalkTicketId]
+      [mtalkTicketId, env.glpiAttachmentMaxSyncAttempts]
     )
   )
 
@@ -1037,7 +1051,8 @@ export async function markConversationAttachmentUploaded(
           mime_type = COALESCE($3, mime_type),
           file_name = COALESCE($4, file_name),
           storage_path = NULL,
-          last_error = NULL
+          last_error = NULL,
+          sync_abandoned_at = NULL
         WHERE id = $1
       `,
       [attachmentId, update.glpiDocumentId, update.mimeType, update.fileName]
@@ -1058,7 +1073,8 @@ export async function markConversationAttachmentLinked(
           glpi_linked_at = NOW(),
           download_status = 'DOWNLOADED',
           storage_path = NULL,
-          last_error = NULL
+          last_error = NULL,
+          sync_abandoned_at = NULL
         WHERE id = $1
       `,
       [attachmentId, glpiDocumentId]
@@ -1077,10 +1093,16 @@ export async function markConversationAttachmentFailed(
         SET
           download_status = 'FAILED',
           storage_path = NULL,
-          last_error = $2
+          last_error = $2,
+          sync_attempts = sync_attempts + 1,
+          last_sync_attempt_at = NOW(),
+          sync_abandoned_at = CASE
+            WHEN sync_attempts + 1 >= $3 THEN NOW()
+            ELSE NULL
+          END
         WHERE id = $1
       `,
-      [attachmentId, message]
+      [attachmentId, message, env.glpiAttachmentMaxSyncAttempts]
     )
   })
 }
